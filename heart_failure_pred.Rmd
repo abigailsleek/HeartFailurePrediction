@@ -1,0 +1,289 @@
+---
+title: "Predicting Heart Failure"
+author: "Nneamaka Chalokwu"
+date: "April 2023"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+This is notebook contains an analysis on the UCL machine learning data on heart failure.
+
+The aim of this project is to:
+
+1. Understand the risk factors contributing to heart failure.
+
+2. Use these feature to accurately predict the possible occurrence of a heart failure using some algorithms like Logistic Regression and Support Vector Machine
+
+3. Possibly find some cluster points between these factors.
+
+
+### Load Libraries
+
+Install and load all the necessary libraries and packages for this project.
+
+```{r}
+library(readr)
+library(stats)
+library(ggplot2)
+library(dplyr)
+library(ggfortify)
+library(forcats)
+library(rsample)
+library(tidyverse)
+library(tidymodels)
+library(gridExtra)
+library(pROC)
+library(caret)
+```
+### Import dataset
+
+The dataset was imported externally and then called below as a variable object. The summary() function calculates some statistical methods on the data such as Min, Max, Mean and Median of the values of each column.
+```{r}
+data <-heart_failure_clinical_records_dataset 
+summary(data)
+```
+
+
+```{r}
+glimpse(data)
+```
+
+The data type of the columns with Boolean values needs to be converted to factors. A factor is a suitable data type for categorical data such as these.
+```{r}
+data <- data %>%
+  mutate(sex = as.factor(sex)) %>%
+  mutate(smoking = as.factor(smoking)) %>%
+  mutate(anaemia = as.factor(anaemia)) %>%
+  mutate(high_blood_pressure = as.factor(high_blood_pressure)) %>%
+  mutate(diabetes = as.factor(diabetes)) %>%
+  mutate(DEATH_EVENT = as.factor(DEATH_EVENT)) %>%
+  rename("death_event"= "DEATH_EVENT")
+glimpse(data)
+```
+
+###  Exploratory Data Analysis
+The data is further analysed using visualisations to understand the relationships
+```{r}
+age.plot <- ggplot(data, mapping = aes(x = age, fill = death_event), color = 'green', size =5) +
+  geom_histogram() +
+  facet_wrap(vars(death_event)) +
+  labs(title = "Prevelance of Heart Disease Across Age", x = "Age (years)", y = "Count", fill = "death_event")
+
+age.plot
+
+```
+This histogram displays the relationship between the Age and Death_event factor. Showing that more people within the ages of 50 -70 survive heart failure. 
+
+
+
+Is there a relationship between the sex groups and high blood pressure?
+```{r}
+sex.plot <- ggplot(data, mapping = aes(x = sex, fill = high_blood_pressure)) +
+  geom_bar(position = 'dodge') +
+  labs(title = "Prevelance of High Blood Pressure Across Sex", x = "sex", y = "Count", fill = "high_blood_pressure")
+
+sex.plot
+
+```
+According to the data, Males by far, are prone to have high blood pressure than females. A deeper dive into the data should reveal the age groups most affected by high blood pressure.
+
+
+
+```{r}
+Age_blood_pressure <- ggplot(data, mapping =aes(x =age, fill = high_blood_pressure)) +
+  geom_histogram(position = "dodge", binwidth = 9.0) +
+  labs(title = "Prevelance of High Blood Pressure Across Age", x = "age", y = "Count", fill = "high_blood_pressure")
+
+Age_blood_pressure
+
+```
+It can be deduced that within the ages of 65 and 75 are prone to high blood pressure. Therefore, it is safe to conclude that males between 65 and 75 are more likely to suffer high blood pressure than females.
+
+
+```{r}
+e_f.plot <- ggplot(data, mapping = aes(x=ejection_fraction, y=death_event)) +
+  geom_boxplot(color = "darkmagenta") +
+  labs(x = "Ejection Fraction", y = "Death Event") +
+  theme(axis.text.x = element_text(size = 12), axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), axis.text.y = element_text(size = 12))
+
+c_p.plot <- ggplot(data, mapping = aes(x=creatinine_phosphokinase, y=death_event)) +
+  geom_boxplot(color = "cornflowerblue") +
+  labs(x = "Creatinine Phosphokinase", y = "Death Event") +
+  theme(axis.text.x = element_text(size = 12), axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), axis.text.y = element_text(size = 12))
+
+s_c.plot <- ggplot(data, mapping = aes(x = serum_creatinine, y =death_event)) +
+  geom_boxplot(color = "coral") +
+  labs(x = " Creatinine Serum", y = "Death Event") +
+  theme(axis.text.x = element_text(size = 12), axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), axis.text.y = element_text(size = 12))
+
+s_s.plot <- ggplot(data, mapping = aes(x = serum_sodium, y =death_event)) +
+  geom_boxplot(color = "maroon") +
+  labs(x = " Soduim Serum", y = "Death Event") +
+  theme(axis.text.x = element_text(size = 12), axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), axis.text.y = element_text(size = 12))
+
+platlet.plot <- ggplot(data, mapping = aes(x = platelets, y =death_event)) +
+  geom_boxplot(color = "chartreuse3") +
+  labs(x = " Platlets", y = "Death Event") +
+  theme(axis.text.x = element_text(size = 12), axis.title.x = element_text(size = 12), 
+        axis.title.y = element_text(size = 12), axis.text.y = element_text(size = 12))
+grid.arrange(e_f.plot, c_p.plot, s_c.plot, s_s.plot, platlet.plot, nrow=2)
+```
+
+### Machine Learning Algorithms- Logistic Regression
+
+Logistic regression is a supervised statistical method to predict a dependent variable by analyzing the relationship between one or more independent variables.
+```{r}
+data.split <- initial_split(data)
+data.train <- training(data.split)
+data.test <- testing(data.split)
+```
+
+
+```{r}
+data.full <- glm(death_event~., data = data.train, family = "binomial")
+summary(data.full)
+```
+The interpretation of this model:
+The coefficients; Estimate represents the average change in log response variable associated with a one unit increase in each predictor variable.This means that higher values of other variables are associated with a lower likelihood of the ejection_fraction variable taking on a value of 1.
+
+The Standard error gives us an idea of the variability associated with the coefficient estimate. We then divide the coefficient estimate by the standard error to obtain a t value.
+
+The p-value Pr(>|t|) tells us the probability associated with a particular t value. This essentially tells us how well each predictor variable is able to predict the value of the response variable(ejection_fraction) in the model. Values less than 0.05 are statistically significant. 
+
+Number of Fisher Scoring Iterations is a measure of time taken in terms of iterations, to fit the model.
+
+##### Therefore, age, serum_creatinine,time and sex are more significant predictor features. Although sex is not as signficant as the other features.
+
+
+```{r}
+# set engine
+my_model <- logistic_reg() %>%
+  set_engine("glm")
+
+# create recipe
+heart_recipe <- recipe(death_event ~., data = data.train) %>%
+  step_rm(smoking) %>%
+  step_rm(serum_sodium) %>%
+  step_rm(platelets) %>%
+  step_rm(high_blood_pressure) %>%
+  step_rm(diabetes) %>%
+  step_rm(anaemia) %>%
+  step_rm(creatinine_phosphokinase) %>%
+  step_zv(all_predictors())
+
+# build work flow
+heart_wflow <- workflow() %>%
+  add_model(my_model) %>%
+  add_recipe(heart_recipe)
+
+# fit training data through the work flow 
+heart_fit <- heart_wflow %>%
+  fit(data = data.train)
+tidy(heart_fit)
+```
+Further evaluation of logistic regression shows that  age, ejection_fraction, serum_creatinine, sex, and time are the most significant features of this data in the prediction of heart failure. 
+
+From the table, we can see that 'ejection_fraction' and 'serum_creatinine' have negative coefficients, while 'age' and 'time' have positive coefficients. This suggests that as 'ejection_fraction' and 'serum_creatinine' increase, the probability of the event happening (represented by the response variable) decreases, while as 'age' and 'time' increase, the probability of the event happening increases. The 'sex1' predictor variable has a negative coefficient, but it is not statistically significant (p-value > 0.05), meaning it is unlikely to have a meaningful impact on the response variable.
+
+ 
+
+### Support Vector Machine Algorithm:
+
+Support vector machine is a machine learning algorithm which can both be used for regression and classification. 
+```{r}
+intrain <- createDataPartition(y = data$death_event, p= 0.7, list = FALSE)
+training <- data[intrain,]
+testing <- data[-intrain,]
+```
+The caret package provides a method createDataPartition() split in data into train and test set.
+
+We’ve passed 3 parameters to this createdatapartition() function:
+
+The “y” parameter takes the value of variable; data$death_event
+The “p” parameter holds a decimal value in the range of 0-1. 70% of the data is used for training and the remaining 30% is for testing the model.
+The “list” parameter is for whether to return a list or matrix. We are passing FALSE for not returning a list
+Now this createDataPartition() method is returning a matrix “intrain”. This intrain matrix has our training data set and we’re storing this in the ‘training’ variable and the rest of the data, i.e. the remaining 30% of the data is stored in the testing variable.
+
+```{r}
+dim(training); 
+dim(testing);
+```
+
+
+```{r}
+anyNA(data)
+summary(data)
+```
+
+Next, we apply the traincontrol() method to control all the computational overheads.
+
+```{r}
+tr_Con <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+
+```
+
+The list generated from the traincontrol() is saved in the tr_Con variable which is then passed into the train method and support vector machine algorithm is compiled with the linear kernel.
+```{r}
+svm_Linear <- train(death_event ~., data = training, method = "svmLinear",
+trControl=tr_Con,
+preProcess = c("center", "scale"),
+tuneLength = 10)
+
+```
+
+
+```{r}
+svm_Linear
+```
+The 'C' parameter is the degree of correct classification an algorithm has to meet in order to avoid mis-classifactions.
+
+```{r}
+test_Pred <- predict(svm_Linear, newdata = testing)
+test_Pred
+```
+
+
+```{r}
+confusionMatrix(table(test_Pred, testing$death_event))
+```
+
+Testing the values of C across several inputs of the ejection_fraction to see at what point/value the SVM classifier gives the most accuracy
+```{r}
+grid <- expand.grid(C = data$ejection_fraction)
+svm_Linear_Grid <- train(death_event ~., data = training, method = "svmLinear",
+trControl=tr_Con,
+preProcess = c("center", "scale"),
+tuneGrid = grid,
+tuneLength = 10)
+svm_Linear_Grid
+plot(svm_Linear_Grid)
+```
+
+
+```{r}
+svm_Linear_Grid$bestTune
+```
+This output proves that the classifier has the most accuracy at the point where the ejection_fraction has a value of 14
+
+
+### Conclusion
+In this project, the objective was to examine the characteristics of the heart failure data set and ascertain the correlations among these characteristics, as well as their relevance in predicting heart failure. Upon implementing logistic regression and support vector machine algorithms, the analysis revealed that time, ejection_fraction, sex, and serum_creatinine are the most notable features in the data set for predicting heart failure.
+
+
+#### Future Recommendation
+Explore the option of clusters with this data.
+```{r}
+
+```
+
+
+```{r}
+```
+
+
+```{r}
